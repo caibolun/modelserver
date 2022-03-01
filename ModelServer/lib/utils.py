@@ -1,17 +1,14 @@
 #coding=utf-8
 
 import os
-import re
 import sys
 import pwd
 import grp
 import fcntl
-import urllib
 import logging
-import argparse
 
 
-from ModelServer.lib.errors import AppImportError, ArgumentError
+from ModelServer.lib.errors import AppImportError
 
 REDIRECT_TO=getattr(os, 'devnull', '/dev/null')
 
@@ -163,64 +160,3 @@ def import_app(module):
     if not callable(app):
         raise AppImportError("Application object must be callable.")
     return app
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', action="store", help="Config file path")
-    parser.add_argument('-s', '--section', action="store", help="Config file section")
-    parser.add_argument('-e', '--extractor', action="store", help="extractor class name")
-    args = parser.parse_args()
-    return args
-
-def parse_db_str(conn_str):
-    default_port = {
-        'mongo': 27017,
-        'mysql': 3306,
-        'postgres': 5432,
-        'redis': 6379,
-    }
-
-    pattern = re.compile(r'''
-            (?P<name>[\w\+]+)://
-            (?:
-                (?P<user>[^:/]*)
-                (?::(?P<passwd>[^/]*))?
-            @)?
-            (?:
-                (?P<host>[^/:]*)
-                (?::(?P<port>[^/]*))?
-            )?
-            (?:/(?P<db>.*))?
-            '''
-            , re.X)
-
-    m = pattern.match(conn_str)
-    if m is not None:
-        components = m.groupdict()
-
-        if components['db'] is not None:
-            tokens = components['db'].split('?', 2)
-            components['db'] = tokens[0]
-
-        if components['passwd'] is not None:
-            components['passwd'] = urllib.unquote_plus(components['passwd'])
-
-        name = components.pop('name')
-
-        if components['port'] is None:
-            components['port'] = default_port[name]
-        else:
-            components['port'] = int(components['port'])
-
-        #components['charset'] = 'utf8'
-
-        result = {}
-        for key, value in components.iteritems():
-            if value:
-                result[key] = value
-
-        return result
-    else:
-        raise ArgumentError(
-            "Could not parse rfc1738 URL from string '%s', the format should match 'dialect+driver://username:password@host:port/database'" % name)
-

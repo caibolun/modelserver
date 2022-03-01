@@ -3,9 +3,9 @@
 '''
 Author: ArlenCai
 Date: 2022-02-28 21:58:15
-LastEditTime: 2022-02-28 23:07:05
+LastEditTime: 2022-03-01 12:00:25
 '''
 from ModelServer import Client
 client = Client()
-ret, resp = client.call('/home/qspace/data/mmbizimggeneralclassify/poemclassify_unix', 'hello world')
+ret, resp = client.call('/home/qspace/data/modelserver/ping_unix', 'hello world')
 print (ret, resp)

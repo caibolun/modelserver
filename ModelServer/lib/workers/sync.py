@@ -1,4 +1,10 @@
-#coding=utf-8
+#!/usr/bin/env python
+# coding=utf-8
+'''
+Author: ArlenCai
+Date: 2022-03-01 12:43:11
+LastEditTime: 2022-03-01 12:44:48
+'''
 
 import os
 import errno
@@ -7,8 +13,6 @@ import select
 
 from ModelServer.lib.utils import close_on_exec
 from ModelServer.lib.workers.base import Worker
-
-__all__ = ["SyncWorker"]
 
 class SyncWorker(Worker):
 

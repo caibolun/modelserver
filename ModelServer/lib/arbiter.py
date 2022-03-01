@@ -1,4 +1,4 @@
-#coding=utf-8
+# coding=utf-8
 
 # This module implement prefork model,  used for spawn and manage child process
 import os
@@ -10,39 +10,40 @@ import random
 import select
 import logging
 import traceback
-import configparser
 
 from ModelServer.lib.pidfile import Pidfile
 from ModelServer.lib.config import Config
 from ModelServer.lib.errors import HaltServer
 from ModelServer.lib.sock import create_sockets
 from ModelServer.lib.utils import (getcwd, daemonize, set_non_blocking, close_on_exec,
-                            reopen_log_file, _setproctitle, set_process_owner,
-                            str2bool, get_user_info, import_app, reopen_log_file)
+                                   reopen_log_file, _setproctitle, set_process_owner,
+                                   str2bool, get_user_info, import_app, reopen_log_file)
+
 
 class Arbiter(object):
 
     PIPE = []
-    START_CTX = {} # for exec
-    LISTENERS = [] # listening sockets
+    START_CTX = {}  # for exec
+    LISTENERS = []  # listening sockets
     WORKERS = {}
     WORKER_BOOT_ERROR = 3
     SOCK_BACKLOG = 64
 
     # signals
     SIG_QUEUE = []
-    SIGNALS = [getattr(signal, "SIG%s" % x) \
-            for x in "HUP QUIT INT TERM TTIN TTOU USR1 USR2 WINCH".split()]
+    SIGNALS = [getattr(signal, "SIG%s" % x)
+               for x in "HUP QUIT INT TERM TTIN TTOU USR1 USR2 WINCH".split()]
     SIG_NAMES = dict(
         (getattr(signal, name), name[3:].lower()) for name in dir(signal)
         if name[:3] == "SIG" and name[3] != "_"
     )
 
-    def __init__(self, worker_uri, busi_config_file=None, config_file=None, section=None):
+    def __init__(self, worker_uri, config_file=None):
         self.worker_uri = worker_uri
+        if config_file[0] != '/':
+            config_file = os.path.join(
+                os.getcwd(), os.path.abspath(config_file))
         self.config_file = config_file
-        self.section = section
-        self.busi_config_file = busi_config_file
 
         self.reexec_pid = 0
         self.worker_age = 0
@@ -64,28 +65,19 @@ class Arbiter(object):
 
     def setup(self):
         # load config file
-        if self.config_file:
-            Config.ACTUAL_CONFIG_FILE = self.config_file
-        else:
-            self.config_file = Config.DEFAULT_CONFIG_FILE
+        self.cfg = Config(self.config_file)
 
-        if self.section:
-            Config.SECTION_NAME = self.section
+        if not os.path.exists(self.cfg.base_path):
+            os.makedirs(self.cfg.base_path)
 
-        self.cfg = Config()
-        self.busi_cfg = configparser.ConfigParser()
-        self.busi_cfg.read([self.busi_config_file,])
+        self.master_name = "modelserver: %s" % self.cfg.proc_name
 
         if isinstance(self.cfg.daemonize, str):
             self.daemonize = str2bool(self.cfg.daemonize)
 
-        if self.cfg.log_file is not None:
-            self.log_file = self.cfg.log_file
+        self.pidfile = Pidfile(os.path.join(
+            self.cfg.base_path, "%s_master.pid" % self.cfg.proc_name))
 
-        if self.cfg.pidfile is not None:
-            self.pidfile = Pidfile(self.cfg.pidfile)
-
-        self.master_name = self.busi_cfg['modelhelper']['proc_name'] + "\"master: %s\"" % self.cfg.proc_name
         if self.cfg.number_workers:
             self.number_workers = int(self.cfg.number_workers)
 
@@ -107,11 +99,11 @@ class Arbiter(object):
                 addr = b.strip().split(':')
                 binds.append((addr[0], int(addr[1])))
             self.bind = binds
-            # self.bind = [tuple(b.strip().split(":")) for b in self.cfg.bind.split(',')] # bind address comma separate
         else:
             self.bind = None
 
-        self.unix_socket = self.cfg.unix_socket
+        self.unix_socket = os.path.join(
+            self.cfg.base_path, "%s_unix" % self.cfg.proc_name)
 
         if self.cfg.kill_interval:
             self.kill_interval = int(self.cfg.kill_interval)
@@ -154,13 +146,12 @@ class Arbiter(object):
 
         _setproctitle(self.master_name)
         self.pid = os.getpid()
-        self.file_logger.info("Master Pid --> %s"%self.pid)
+        self.file_logger.info("Master Pid --> %s" % self.pid)
         try:
             if self.pidfile:
                 self.pidfile.create(self.pid)
         except Exception as e:
             self.file_logger.info(str(e))
-        self.file_logger.info("aa")
 
         self.init_signals()
 
@@ -175,8 +166,10 @@ class Arbiter(object):
             close_on_exec(p)
 
         if not self.LISTENERS and (self.bind or self.unix_socket):
-            self.file_logger.info("Listern on %s, unixdomian:%s", self.cfg.bind or "", self.cfg.unix_socket or "")
-            self.LISTENERS = create_sockets(self.bind, self.unix_socket, self.SOCK_BACKLOG)
+            self.file_logger.info(
+                "Listern on %s, unixdomian:%s", self.bind or "", self.unix_socket or "")
+            self.LISTENERS = create_sockets(
+                self.bind, self.unix_socket, self.SOCK_BACKLOG)
 
         for s in self.LISTENERS:
             close_on_exec(s)
@@ -185,7 +178,7 @@ class Arbiter(object):
     def run(self):
         self.start()
         self.manage_workers()
-        while 1: # handle signals and manage worker process
+        while 1:  # handle signals and manage worker process
             try:
                 self.reap_workers()
                 sig = self.SIG_QUEUE.pop(0) if len(self.SIG_QUEUE) else None
@@ -200,14 +193,14 @@ class Arbiter(object):
                     self.file_logger.info("Ignoring unknown signal: %s", sig)
                     continue
                 signame = self.SIG_NAMES.get(sig)
-                print (signame)
+                print(signame)
                 handler = getattr(self, "handle_%s" % signame, None)
                 if not handler:
                     self.file_logger.error("Unhandled signal: %s", signame)
                     continue
                 self.file_logger.info("Handling signal: %s", signame)
                 handler()
-            #except StopIteration:
+            # except StopIteration:
             #    self.halt()
             except KeyboardInterrupt:
                 self.halt()
@@ -217,7 +210,7 @@ class Arbiter(object):
                 raise
             except Exception:
                 self.file_logger.info("Unhandled exception in main loop:\n%s",
-                            traceback.format_exc())
+                                      traceback.format_exc())
                 self.stop(False)
                 if self.pidfile is not None:
                     self.pidfile.unlink()
@@ -232,8 +225,10 @@ class Arbiter(object):
             self.spawn_workers()
         else:
             if actual_number_workers > self.number_workers:
-                workers = sorted(self.WORKERS.items(), key=lambda x: x[1]) # age, bigger means newer
-                pids = [pid for pid, _ in workers[:actual_number_workers - self.number_workers]]
+                # age, bigger means newer
+                workers = sorted(self.WORKERS.items(), key=lambda x: x[1])
+                pids = [
+                    pid for pid, _ in workers[:actual_number_workers - self.number_workers]]
                 self.file_logger.info("kill pids:%s", pids)
                 self.kill_workers(pids)
 
@@ -245,13 +240,14 @@ class Arbiter(object):
     def spawn_worker(self):
         self.worker_age += 1
         pid = os.fork()
-        if pid != 0: # parent
-            self.WORKERS[pid] = self.worker_age # need worker's age param
+        if pid != 0:  # parent
+            self.WORKERS[pid] = self.worker_age  # need worker's age param
             # self.file_logger.info("add pid:%s", pid)
             return pid
         # process child
         try:
-            worker = self.worker_class(self.cfg, self.busi_cfg, self.file_logger, self.pid, self.LISTENERS)
+            worker = self.worker_class(
+                self.cfg, self.file_logger, self.pid, self.LISTENERS)
             worker_pid = os.getpid()
             self.file_logger.info("Booting worker with pid:%s", worker_pid)
             self.set_process_owner(self.uid, self.gid)
@@ -261,7 +257,8 @@ class Arbiter(object):
         except SystemExit:
             raise
         except:
-            self.file_logger.exception("Exception in worker process:\n%s", traceback.format_exc())
+            self.file_logger.exception(
+                "Exception in worker process:\n%s", traceback.format_exc())
             if not worker.booted:
                 sys.exit(self.WORKER_BOOT_ERROR)
             sys.exit(-1)
@@ -288,10 +285,11 @@ class Arbiter(object):
         """\
         Reap workers to avoid zombie processes
         """
-        print ('reap_workers')
+        print('reap_workers')
         try:
             while 1:
-                wpid, status = os.waitpid(-1, os.WNOHANG) # -1 means wait for any child of the current process, see doc:http://docs.python.org/2/library/os.html
+                # -1 means wait for any child of the current process, see doc:http://docs.python.org/2/library/os.html
+                wpid, status = os.waitpid(-1, os.WNOHANG)
                 if not wpid:
                     break
                 self.file_logger.info("Reap worker %s", wpid)
@@ -356,24 +354,25 @@ class Arbiter(object):
         """
         kill worker graceful or not
         """
-        # self.LISTENERS = []
         sig = signal.SIGQUIT if graceful else signal.SIGTERM
         limit = time.time() + self.graceful_timeout
         while self.WORKERS and time.time() < limit:
             self.kill_workers(self.WORKERS.keys(), sig)
             time.sleep(0.1)
             self.reap_workers()
-        self.kill_workers(self.WORKERS.keys(), signal.SIGKILL) # force quit after gracefull timeout
+        # force quit after gracefull timeout
+        self.kill_workers(self.WORKERS.keys(), signal.SIGKILL)
 
     def reload(self):
-        self.file_logger.info("Reload config file:%s", self.cfg.ACTUAL_CONFIG_FILE)
+        self.file_logger.info("Reload config file:%s",
+                              self.cfg.ACTUAL_CONFIG_FILE)
 
         old_pidfile = self.pidfile
         self.cfg.load_config()
         self.setup()
 
         if old_pidfile and self.pidfile and old_pidfile.fname != self.pidfile.fname:
-            #old_pidfile.unlink()
+            # old_pidfile.unlink()
             self.file_logger.info("pidfile:%s", self.pidfile.fname)
             self.pidfile.rename(self.pid)
 
@@ -407,7 +406,8 @@ class Arbiter(object):
             set_process_owner(uid, gid)
         except OSError as e:
             if e.errno == errno.EPERM:
-                self.file_logger.warning("Set proc username need sudo permission, use default user instead")
+                self.file_logger.warning(
+                    "Set proc username need sudo permission, use default user instead")
             else:
                 raise e
 
@@ -450,7 +450,6 @@ class Arbiter(object):
             self.kill_workers(self.WORKERS.keys(), signal.SIGQUIT)
         else:
             self.file_logger.info("SIGWINCH ignored. Not daemonized")
-
 
     def handle_ttin(self):
         """\

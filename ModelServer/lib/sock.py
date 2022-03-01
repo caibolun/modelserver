@@ -1,3 +1,10 @@
+#!/usr/bin/env python
+# coding=utf-8
+'''
+Author: ArlenCai
+Date: 2022-03-01 12:42:35
+LastEditTime: 2022-03-01 12:42:35
+'''
 #coding=utf-8
 
 import os
@@ -52,6 +59,4 @@ def _create_socket(addr, backlog, socket_family=socket.AF_INET, fd=None):
 
 def set_socket_options(sock):
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    #if sock.family == sock.AF_INET:
-    #    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
     sock.setblocking(0)

@@ -3,8 +3,9 @@
 '''
 Author: ArlenCai
 Date: 2022-02-28 23:07:45
-LastEditTime: 2022-02-28 23:07:46
+LastEditTime: 2022-03-01 12:13:11
 '''
+import select
 import time
 import logging
 import pickle
@@ -12,8 +13,8 @@ from ModelServer.lib.workers.batchsync import BatchSyncWorker
 import struct
 
 class BatchHandler(BatchSyncWorker):
-    def __init__(self, cfg, busi_cfg, file_logger=None, ppid=None, sockets=None):
-        BatchSyncWorker.__init__(self, cfg, busi_cfg, file_logger, ppid, sockets)
+    def __init__(self, cfg, file_logger=None, ppid=None, sockets=None):
+        BatchSyncWorker.__init__(self, cfg, file_logger, ppid, sockets)
         self.logger = logging.getLogger()
 
     def init_process(self):

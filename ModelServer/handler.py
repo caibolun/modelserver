@@ -3,7 +3,7 @@
 '''
 Author: ArlenCai
 Date: 2022-02-28 22:42:55
-LastEditTime: 2022-02-28 23:45:11
+LastEditTime: 2022-03-01 12:12:55
 '''
 import logging
 import pickle
@@ -11,8 +11,8 @@ from .lib.workers.sync import SyncWorker
 import struct
 
 class Handler(SyncWorker):
-    def __init__(self, cfg, busi_cfg, file_logger=None, ppid=None, sockets=None):
-        SyncWorker.__init__(self, cfg, busi_cfg, file_logger, ppid, sockets)
+    def __init__(self, cfg, file_logger=None, ppid=None, sockets=None):
+        SyncWorker.__init__(self, cfg, file_logger, ppid, sockets)
         self.logger = logging.getLogger()
 
     def init_process(self):

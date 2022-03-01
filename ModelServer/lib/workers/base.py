@@ -18,16 +18,15 @@ class Worker(object):
 
     SOCK_BACKLOG = 20
 
-    def __init__(self, cfg, busi_cfg, file_logger, ppid, sockets=None):
+    def __init__(self, cfg, file_logger, ppid, sockets=None):
         self.cfg = cfg
         self.file_logger = file_logger or logging.getLogger()
         self.ppid = ppid
         self.LISTENERS = sockets
-        self.busi_cfg = busi_cfg
 
         self.alive = True
         self.booted = False
-        self.worker_name = self.busi_cfg['modelhelper']['proc_name'] + "\"worker: %s\"" % self.cfg.proc_name
+        self.worker_name = "modelserver: %s" % self.cfg.proc_name
         self.nr = 0 # actual handle request count
         self.max_requests = int(self.cfg.max_requests or MAXSIZE)
         self.rd_fds = None
